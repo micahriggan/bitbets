@@ -1,14 +1,14 @@
-import React from 'react';
-import logo from './logo.svg';
+import React from "react";
+import logo from "./logo.svg";
 import { BitBetsContainer } from "./containers/bets";
-import './App.css';
+import "./App.css";
 
 const App: React.FC = () => {
   return (
     <div className="App">
-    <BitBetsContainer/>
+      <BitBetsContainer />
     </div>
   );
-}
+};
 
 export default App;

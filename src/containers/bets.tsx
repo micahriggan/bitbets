@@ -11,6 +11,16 @@ const address =
 const BitBetsAbi = require("../web3/build/contracts/BitBets.json").abi;
 console.log(BitBetsAbi);
 
+interface ContractBet {
+  terms: string;
+  amount: number;
+  options: string;
+  oracle: string;
+  outcome: number;
+  totalPool: number;
+  paymentToken: string;
+}
+
 interface Bet {
   terms: string;
   amount: number;
@@ -21,12 +31,16 @@ interface Bet {
   paymentToken: string;
 }
 interface IState {
-  bets: Array<Bet>;
+  bets: Array<ContractBet>;
   newBet: Partial<Bet>;
   betOption: string;
+  user: string;
 }
 
 const styles = {
+  card: {
+    maxWidth: "400px"
+  },
   section: {
     margin: "0 auto",
     padding: "15px"
@@ -37,14 +51,19 @@ const styles = {
     padding: "15px",
     display: "flex" as "flex",
     flexDirection: "column" as "column"
+  },
+  flexRow: {
+    display: "flex" as "flex",
+    flexDirection: "row" as "row"
   }
 };
 export class BitBetsContainer extends React.Component<{}, IState> {
   web3: Web3 = new Web3();
   state: IState = {
-    bets: new Array<Bet>(),
+    bets: new Array<ContractBet>(),
     newBet: {},
-    betOption: ""
+    betOption: "",
+    user: ""
   };
 
   async componentDidMount() {
@@ -56,7 +75,14 @@ export class BitBetsContainer extends React.Component<{}, IState> {
     if ((window as any).ethereum) {
       await (window as any).ethereum.enable();
     }
+
+    this.populateUser();
     this.populateBetsState();
+  }
+
+  async populateUser() {
+    const [user] = await this.web3.eth.getAccounts();
+    this.setState({ user });
   }
 
   getBetsContract() {
@@ -84,21 +110,60 @@ export class BitBetsContainer extends React.Component<{}, IState> {
   }
 
   betsComponent() {
-    const bets = this.state.bets.map(bet => (
+    const bets = this.state.bets.map((bet, betIndex) => (
       <div>
-        <div>{bet.terms}</div>
-        <div>{bet.amount}</div>
-        <div>{bet.paymentToken}</div>
-        <div>{bet.totalPool} Pool</div>
-        <div>{bet.oracle} Oracle</div>
         <div>
-          <h4>Options</h4>
-          {bet.options}
+          <h4>Terms: </h4>
+          {bet.terms}
         </div>
+        <div>
+          <h4>Bet Amount: </h4>
+          {bet.amount}
+        </div>
+        <div>
+          <h4>Pool Balance: </h4>
+          {bet.totalPool}
+        </div>
+        <div>
+          <h4>Oracle: </h4>
+          {bet.oracle}
+        </div>
+        <div>
+          <h4>Place Your Bet</h4>
+          {bet.outcome.toString() === "0" ? (
+            bet.options
+              .split(",")
+              .map((option, optionIndex) => (
+                <Button
+                  onClick={() => this.placeBet(betIndex, optionIndex + 1)}
+                >
+                  {option}
+                </Button>
+              ))
+          ) : (
+            <Button onClick={() => this.redeemBet(betIndex)}>Widthdraw</Button>
+          )}
+        </div>
+        {this.state.user === bet.oracle ? (
+          <div>
+            <h4>Oracle Result</h4>
+            {bet.outcome.toString() === "0"
+              ? bet.options
+                  .split(",")
+                  .map((option, optionIndex) => (
+                    <Button
+                      onClick={() => this.resolveBet(betIndex, optionIndex + 1)}
+                    >
+                      {option}
+                    </Button>
+                  ))
+              : bet.options.split(",")[bet.outcome - 1]}
+          </div>
+        ) : null}
       </div>
     ));
     return (
-      <Paper style={styles.section}>
+      <Paper style={{ ...styles.card, ...styles.section }}>
         {bets.length > 0 ? bets : "No bets have been created"}
       </Paper>
     );
@@ -136,8 +201,7 @@ export class BitBetsContainer extends React.Component<{}, IState> {
     const newBet = this.state.newBet;
     newBet.options = newBet.options || [];
     newBet.options.push(option);
-    this.setState({ betOption: "" });
-    this.setState({ newBet });
+    this.setState({ newBet, betOption: "" });
   }
 
   async createBet() {
@@ -150,6 +214,32 @@ export class BitBetsContainer extends React.Component<{}, IState> {
         newBet.options ? newBet.options.join() : "",
         newBet.paymentToken || "0x" + new Array(40).fill(0).join("")
       )
+      .send({ from });
+    this.populateBetsState();
+  }
+
+  async placeBet(betIndex: number, optionIndex: number) {
+    const [from] = await this.web3.eth.getAccounts();
+    const value = this.state.bets[betIndex].amount;
+    await this.getBetsContract()
+      .methods.placeBet(betIndex, optionIndex)
+      .send({ from, value });
+    this.populateBetsState();
+  }
+
+  async resolveBet(betIndex: number, optionIndex: number) {
+    const [from] = await this.web3.eth.getAccounts();
+    const value = this.state.bets[betIndex].amount;
+    await this.getBetsContract()
+      .methods.resolveBet(betIndex, optionIndex)
+      .send({ from });
+    this.populateBetsState();
+  }
+
+  async redeemBet(betIndex: number) {
+    const [from] = await this.web3.eth.getAccounts();
+    await this.getBetsContract()
+      .methods.withdraw(betIndex)
       .send({ from });
     this.populateBetsState();
   }
