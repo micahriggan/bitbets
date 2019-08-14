@@ -220,15 +220,17 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
                 {bet.userChoice.toString() === "0" ? (
                   <div>
                     <h5>Place Your Bet</h5>
-                    {bet.options.map((option, optionIndex) => (
-                      <Button
-                        onClick={() =>
-                          this.placeBet(bet.index, optionIndex + 1)
-                        }
-                      >
-                        {option}
-                      </Button>
-                    ))}
+                    {bet.options.map((option, optionIndex) =>
+                      option ? (
+                        <Button
+                          onClick={() =>
+                            this.placeBet(bet.index, optionIndex + 1)
+                          }
+                        >
+                          {option}
+                        </Button>
+                      ) : null
+                    )}
                   </div>
                 ) : (
                   <div>
