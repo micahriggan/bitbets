@@ -179,7 +179,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
   }
 
   betsComponent() {
-    const bets = this.state.bets.map(bet => {
+    const bets = this.state.bets.reverse().map(bet => {
       const token = getTokenForAddress(bet.paymentToken);
       const isOpen = bet.outcome.toString() === "0";
       return (
