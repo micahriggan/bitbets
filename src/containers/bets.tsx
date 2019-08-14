@@ -4,6 +4,7 @@ import Paper from "@material-ui/core/Paper";
 import TextField from "@material-ui/core/TextField";
 import Button from "@material-ui/core/Button";
 import Divider from "@material-ui/core/Divider";
+import CircularProgress from '@material-ui/core/CircularProgress';
 import Select from "@material-ui/core/Select";
 import MenuItem from "@material-ui/core/MenuItem";
 import { BetContractAddress } from "../config";
@@ -239,7 +240,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
     });
     return (
       <div style={{ ...styles.card, ...styles.section }}>
-        {bets.length > 0 ? bets : "No bets have been created"}
+        {bets.length > 0 ? bets : <CircularProgress className="inherit" />}
       </div>
     );
   }

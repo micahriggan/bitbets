@@ -1,5 +1,5 @@
 import React from "react";
-import logo from "./logo.svg";
+import BitBetsLogo from "./images/bitbets.jpg";
 import { BitBetsContainer } from "./containers/bets";
 import "./App.css";
 import { createBrowserHistory } from "history";
@@ -10,6 +10,7 @@ const customHistory = createBrowserHistory();
 const App: React.FC = () => {
   return (
     <div className="App">
+      <img src={BitBetsLogo} alt="logo" className="App-logo"/>
       <Router history={customHistory}>
         <Switch>
           <Route exact path="/:bet" component={BetContainer} />
