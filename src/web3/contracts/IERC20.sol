@@ -1,4 +1,4 @@
-pragma solidity ^0.5.1;
+pragma solidity ^0.4.25;
 
 contract IERC20 {
   function totalSupply() public view returns (uint);

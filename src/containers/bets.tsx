@@ -4,14 +4,41 @@ import Paper from "@material-ui/core/Paper";
 import TextField from "@material-ui/core/TextField";
 import Button from "@material-ui/core/Button";
 import Divider from "@material-ui/core/Divider";
+import Select from "@material-ui/core/Select";
+import MenuItem from "@material-ui/core/MenuItem";
+import { BetContractAddress } from "../config";
+import { RouteComponentProps } from "react-router";
+import { Link } from "react-router-dom";
 
-const address =
-  process.env.REACT_APP_CONTRACT ||
-  "0x4d872048A728f4c733A06d361B226B0D4F3290D9";
 const BitBetsAbi = require("../web3/build/contracts/BitBets.json").abi;
-console.log(BitBetsAbi);
+const ERC20ABI = require("../web3/build/contracts/IERC20.json").abi;
 
-interface ContractBet {
+const ZERO_ADDR = "0x" + new Array(40).fill("0").join("");
+
+const TOKENS = {
+  ETH: { address: ZERO_ADDR, decimals: 18, name: "ETH" },
+  GUSD: {
+    address: "0x056fd409e1d7a124bd7017459dfea2f387b6d5cd",
+    name: "GUSD",
+    decimals: 2
+  },
+  USDC: {
+    address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    decimals: 6,
+    name: "USDC"
+  },
+  PAX: {
+    address: "0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+    decimals: 18,
+    name: "PAX"
+  }
+};
+
+function getTokenForAddress(address: string) {
+  return Object.values(TOKENS).find(t => t.address === address);
+}
+
+export interface ContractBet {
   terms: string;
   amount: number;
   options: string;
@@ -21,7 +48,7 @@ interface ContractBet {
   paymentToken: string;
 }
 
-interface Bet {
+export interface Bet {
   terms: string;
   amount: number;
   options: string[];
@@ -29,13 +56,21 @@ interface Bet {
   outcome: number;
   totalPool: number;
   paymentToken: string;
+  index: number;
 }
 interface IState {
-  bets: Array<ContractBet>;
+  network: keyof typeof BetContractAddress;
+  bets: Array<Bet>;
   newBet: Partial<Bet>;
   betOption: string;
   user: string;
+  canWithdraw: { [betIndex: string]: boolean };
 }
+
+interface IProps
+  extends RouteComponentProps<{
+    bet?: string;
+  }> {}
 
 const styles = {
   card: {
@@ -57,13 +92,17 @@ const styles = {
     flexDirection: "row" as "row"
   }
 };
-export class BitBetsContainer extends React.Component<{}, IState> {
+export class BitBetsContainer extends React.Component<IProps, IState> {
   web3: Web3 = new Web3();
   state: IState = {
-    bets: new Array<ContractBet>(),
-    newBet: {},
+    network: "dev",
+    bets: new Array<Bet>(),
+    newBet: {
+      paymentToken: TOKENS.ETH.address
+    },
     betOption: "",
-    user: ""
+    user: "",
+    canWithdraw: {}
   };
 
   async componentDidMount() {
@@ -76,7 +115,10 @@ export class BitBetsContainer extends React.Component<{}, IState> {
       await (window as any).ethereum.enable();
     }
 
-    this.populateUser();
+    const networkId = await this.web3.eth.net.getId();
+    const network = networkId === 1 ? "mainnet" : "dev";
+    this.setState({ network });
+    await this.populateUser();
     this.populateBetsState();
   }
 
@@ -84,20 +126,35 @@ export class BitBetsContainer extends React.Component<{}, IState> {
     const [user] = await this.web3.eth.getAccounts();
     this.setState({ user });
   }
+  getBetsContractAddress() {
+    return BetContractAddress[this.state.network];
+  }
 
   getBetsContract() {
+    const address = this.getBetsContractAddress();
     return new this.web3.eth.Contract(BitBetsAbi, address);
+  }
+
+  getErc20(address: string) {
+    return new this.web3.eth.Contract(ERC20ABI, address);
   }
 
   async populateBetsState() {
     const contract = this.getBetsContract();
     const bets = [];
+    const canWithdraw = {} as IState["canWithdraw"];
     let index = 0;
     try {
       let betItr = await contract.methods.bets(index).call();
-      console.log(betItr);
       while (betItr) {
-        console.log(betItr);
+        if (betItr.outcome) {
+          canWithdraw[index.toString()] = await this.canWithdraw(
+            index,
+            betItr.outcome
+          );
+        }
+        betItr.options = betItr.options.split(",");
+        betItr.index = index;
         bets.push(betItr);
         index++;
         betItr = await contract.methods.bets(index).call();
@@ -106,66 +163,84 @@ export class BitBetsContainer extends React.Component<{}, IState> {
       console.log(e);
     }
 
-    this.setState({ bets });
+    this.setState({ bets, canWithdraw });
+  }
+
+  async canWithdraw(betIndex: number, outcome: number) {
+    const user = this.state.user;
+    const contract = this.getBetsContract();
+    const isDone = outcome.toString() !== "0";
+    const choice = await contract.methods.userBets(betIndex, user).call();
+    const withdrawn = await contract.methods
+      .userWithdrawn(betIndex, user)
+      .call();
+    return isDone && choice === outcome && !withdrawn;
   }
 
   betsComponent() {
-    const bets = this.state.bets.map((bet, betIndex) => (
-      <div>
-        <div>
-          <h4>Terms: </h4>
-          {bet.terms}
-        </div>
-        <div>
-          <h4>Bet Amount: </h4>
-          {bet.amount}
-        </div>
-        <div>
-          <h4>Pool Balance: </h4>
-          {bet.totalPool}
-        </div>
-        <div>
-          <h4>Oracle: </h4>
-          {bet.oracle}
-        </div>
-        <div>
-          <h4>Place Your Bet</h4>
-          {bet.outcome.toString() === "0" ? (
-            bet.options
-              .split(",")
-              .map((option, optionIndex) => (
+    const bets = this.state.bets.map(bet => {
+      const token = getTokenForAddress(bet.paymentToken);
+      const isOpen = bet.outcome.toString() === "0";
+      return (
+        <Paper style={styles.card}>
+          <div>
+            <h4>I bet that...</h4>
+            <Link to={"/" + bet.index}>{bet.terms}</Link>
+          </div>
+          <div>
+            <h4>Bet Amount: </h4>
+            {bet.amount / Math.pow(10, token!.decimals)} {token!.name}
+          </div>
+          <div>
+            <h4>Pool Balance: </h4>
+            {bet.totalPool / Math.pow(10, token!.decimals)} {token!.name}
+          </div>
+          {isOpen ? (
+            <div>
+              <Divider />
+              <h5>Place Your Bet</h5>
+              {bet.options.map((option, optionIndex) => (
                 <Button
-                  onClick={() => this.placeBet(betIndex, optionIndex + 1)}
+                  onClick={() => this.placeBet(bet.index, optionIndex + 1)}
                 >
                   {option}
                 </Button>
-              ))
+              ))}
+            </div>
           ) : (
-            <Button onClick={() => this.redeemBet(betIndex)}>Widthdraw</Button>
+            <div>
+              <h4>Bet Outcome</h4>
+              {bet.options[bet.outcome - 1]}
+            </div>
           )}
-        </div>
-        {this.state.user === bet.oracle ? (
-          <div>
-            <h4>Oracle Result</h4>
-            {bet.outcome.toString() === "0"
-              ? bet.options
-                  .split(",")
-                  .map((option, optionIndex) => (
-                    <Button
-                      onClick={() => this.resolveBet(betIndex, optionIndex + 1)}
-                    >
-                      {option}
-                    </Button>
-                  ))
-              : bet.options.split(",")[bet.outcome - 1]}
-          </div>
-        ) : null}
-      </div>
-    ));
+          {this.state.canWithdraw[bet.index.toString()] ? (
+            <div>
+              <h4> Congrats! </h4>
+              <Button onClick={() => this.redeemBet(bet.index)}>
+                Widthdraw
+              </Button>
+            </div>
+          ) : null}
+          {isOpen && this.state.user === bet.oracle ? (
+            <div>
+              <Divider />
+              <h5>Oracle</h5>
+              {bet.options.map((option, optionIndex) => (
+                <Button
+                  onClick={() => this.resolveBet(bet.index, optionIndex + 1)}
+                >
+                  {option}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+        </Paper>
+      );
+    });
     return (
-      <Paper style={{ ...styles.card, ...styles.section }}>
+      <div style={{ ...styles.card, ...styles.section }}>
         {bets.length > 0 ? bets : "No bets have been created"}
-      </Paper>
+      </div>
     );
   }
 
@@ -207,20 +282,42 @@ export class BitBetsContainer extends React.Component<{}, IState> {
   async createBet() {
     const newBet = this.state.newBet;
     const [from] = await this.web3.eth.getAccounts();
-    await this.getBetsContract()
-      .methods.createBet(
-        newBet.terms,
-        newBet.amount,
-        newBet.options ? newBet.options.join() : "",
-        newBet.paymentToken || "0x" + new Array(40).fill(0).join("")
-      )
-      .send({ from });
-    this.populateBetsState();
+    const selectedToken = Object.values(TOKENS).find(
+      t => t.address === newBet.paymentToken
+    );
+    if (selectedToken) {
+      const BN = this.web3.utils.toBN;
+      const amountStr = newBet.amount!.toString();
+      const decimalIndex = amountStr.indexOf(".");
+      const shiftAmount =
+        decimalIndex > -1 ? amountStr.length - (decimalIndex + 1) : 0;
+      const afterDecimals = Number(amountStr.slice(decimalIndex + 1));
+      const shift = Math.pow(10, shiftAmount);
+      const power = BN(10).pow(BN(selectedToken.decimals - shiftAmount));
+      const bigAmount = BN(afterDecimals).mul(power);
+      await this.getBetsContract()
+        .methods.createBet(
+          newBet.terms,
+          bigAmount.toString(),
+          newBet.options ? newBet.options.join() : "",
+          newBet.paymentToken || ZERO_ADDR
+        )
+        .send({ from });
+      this.populateBetsState();
+    }
   }
 
   async placeBet(betIndex: number, optionIndex: number) {
+    const contractAddress = this.getBetsContractAddress();
     const [from] = await this.web3.eth.getAccounts();
-    const value = this.state.bets[betIndex].amount;
+    const bet = this.state.bets[betIndex];
+    let value = bet.amount;
+    if (bet.paymentToken !== ZERO_ADDR) {
+      value = 0;
+      await this.getErc20(bet.paymentToken)
+        .methods.approve(contractAddress, bet.amount)
+        .send({ from });
+    }
     await this.getBetsContract()
       .methods.placeBet(betIndex, optionIndex)
       .send({ from, value });
@@ -249,16 +346,25 @@ export class BitBetsContainer extends React.Component<{}, IState> {
       <div style={styles.create}>
         <TextField
           onChange={e => this.setBetTerms(e.target.value)}
-          label="Bet Terms"
+          label="I Bet that..."
         />
         <TextField
           onChange={e => this.setBetAmount(Number(e.target.value))}
           label="Bet Amount"
         />
-        <TextField
-          onChange={e => this.setBetPaymentToken(e.target.value)}
-          label="Payment Token"
-        />
+        <Select
+          value={this.state.newBet.paymentToken}
+          onChange={e => this.setBetPaymentToken(e.target.value as string)}
+          inputProps={{
+            name: "token",
+            id: "token-simple"
+          }}
+        >
+          <MenuItem value={TOKENS.ETH.address}>ETH</MenuItem>
+          <MenuItem value={TOKENS.GUSD.address}>GUSD</MenuItem>
+          <MenuItem value={TOKENS.PAX.address}>PAX</MenuItem>
+          <MenuItem value={TOKENS.USDC.address}>USDC</MenuItem>
+        </Select>
         <h3>Bet Options</h3>
         {(this.state.newBet.options || []).map(o => (
           <div>{o}</div>

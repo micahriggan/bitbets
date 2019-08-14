@@ -1,12 +1,10 @@
-pragma experimental ABIEncoderV2;
-pragma solidity ^0.5.1;
+pragma solidity ^0.4.24;
 import "./IERC20.sol";
 
-
 contract BitBets {
-
-  mapping(uint => mapping(address => uint)) userBets;
-  mapping(uint => mapping(address => bool)) userWithdrawn;
+  mapping(uint => mapping(uint => uint)) public choiceBets;
+  mapping(uint => mapping(address => uint)) public userBets;
+  mapping(uint => mapping(address => bool)) public userWithdrawn;
   mapping(uint => address[]) takers;
   struct Bet {
     string terms;
@@ -34,19 +32,18 @@ contract BitBets {
 
   function placeBet(uint betIndex, uint option) public payable {
     Bet memory currentBet = bets[betIndex];
-    if(currentBet.paymentToken == address(0x0)) {
+    if(currentBet.paymentToken == address(0)) {
       require(msg.value == currentBet.amount, "Must meet the bet requirement");
     } else {
-      require(IERC20(currentBet.paymentToken).allowance(msg.sender, address(this)) >= currentBet.amount, "Must have approved this bet to move tokens");
-      require(IERC20(currentBet.paymentToken).transferFrom(msg.sender, address(this), currentBet.amount));
+      IERC20(currentBet.paymentToken).allowance(msg.sender, address(this)) >= currentBet.amount;
+      IERC20(currentBet.paymentToken).transferFrom(msg.sender, address(this), currentBet.amount);
     }
-
     require(option > 0, "You must use 1 based indexes for choosing an option");
-    if(currentBet.outcome == 0) {
-      userBets[betIndex][msg.sender] = option;
-      takers[betIndex].push(msg.sender);
-      bets[betIndex].totalPool += currentBet.amount;
-    }
+    require(currentBet.outcome == 0, "Cannot bet on a done game");
+    userBets[betIndex][msg.sender] = option;
+    choiceBets[betIndex][option]++;
+    takers[betIndex].push(msg.sender);
+    bets[betIndex].totalPool += currentBet.amount;
   }
 
   function resolveBet(uint betIndex, uint outcome) public {
@@ -62,10 +59,11 @@ contract BitBets {
     require(userBets[betIndex][msg.sender] == currentBet.outcome, "You didn't select the correct answer");
     require(userWithdrawn[betIndex][msg.sender] == false, "You've already withdrawn");
     userWithdrawn[betIndex][msg.sender] = true;
+    uint reward = currentBet.totalPool / choiceBets[betIndex][currentBet.outcome];
     if(currentBet.paymentToken == address(0x0)) {
-      address(msg.sender).transfer(currentBet.amount);
+      address(msg.sender).transfer(reward);
     } else {
-      IERC20(currentBet.paymentToken).transfer(msg.sender, currentBet.amount);
+      IERC20(currentBet.paymentToken).transfer(msg.sender, reward);
     }
   }
 }
