@@ -76,7 +76,9 @@ interface IProps
 
 const styles = {
   card: {
-    maxWidth: "400px"
+    maxWidth: "400px",
+    padding: "15px",
+    marginBottom: "15px"
   },
   section: {
     margin: "0 auto",
