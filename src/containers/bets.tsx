@@ -327,7 +327,8 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
 
   async resolveBet(betIndex: number, optionIndex: number) {
     const [from] = await this.web3.eth.getAccounts();
-    const value = this.state.bets[betIndex].amount;
+    const bet = this.state.bets.find(b => b.index === betIndex)!;
+    const value = bet.amount;
     await this.getBetsContract()
       .methods.resolveBet(betIndex, optionIndex)
       .send({ from });
