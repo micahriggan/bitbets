@@ -36,7 +36,9 @@ const TOKENS = {
 };
 
 function getTokenForAddress(address: string) {
-  return Object.values(TOKENS).find(t => t.address.toLowerCase() === address.toLowerCase());
+  return Object.values(TOKENS).find(
+    t => t.address.toLowerCase() === address.toLowerCase()
+  );
 }
 
 export interface ContractBet {
@@ -302,8 +304,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
 
   addBetOptions(option: string) {
     const newBet = this.state.newBet;
-    newBet.options = newBet.options || [];
-    newBet.options.push(option);
+    newBet.options = Array.from(new Set(newBet.options || []).add(option));
     this.setState({ newBet, betOption: "" });
   }
 
