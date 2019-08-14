@@ -36,6 +36,6 @@ export class BetContainer extends BitBetsContainer {
   }
 
   render() {
-    return <div>{this.betsComponent()} </div>;
+    return <div>{this.betsComponent(false)} </div>;
   }
 }

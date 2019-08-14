@@ -58,6 +58,7 @@ export interface Bet {
   totalPool: number;
   paymentToken: string;
   index: number;
+  userChoice: number;
 }
 interface IState {
   network: keyof typeof BetContractAddress;
@@ -154,6 +155,11 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
             betItr.outcome
           );
         }
+
+        const choice = await contract.methods
+          .userBets(index, this.state.user)
+          .call();
+        betItr.userChoice = choice;
         betItr.options = betItr.options.split(",");
         betItr.index = index;
         bets.push(betItr);
@@ -178,66 +184,85 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
     return isDone && choice === outcome && !withdrawn;
   }
 
-  betsComponent() {
-    const bets = this.state.bets.reverse().map(bet => {
-      const token = getTokenForAddress(bet.paymentToken);
-      const isOpen = bet.outcome.toString() === "0";
-      return (
-        <Paper style={styles.card}>
-          <div>
-            <h4>I bet that...</h4>
-            <Link to={"/" + bet.index}>{bet.terms}</Link>
-          </div>
-          <div>
-            <h4>Bet Amount: </h4>
-            {bet.amount / Math.pow(10, token!.decimals)} {token!.name}
-          </div>
-          <div>
-            <h4>Pool Balance: </h4>
-            {bet.totalPool / Math.pow(10, token!.decimals)} {token!.name}
-          </div>
-          {isOpen ? (
+  betsComponent(filter: boolean) {
+    const bets = this.state.bets
+      .reverse()
+      .filter(b => {
+        return (
+          !filter ||
+          (b.outcome.toString() === "0" || this.state.canWithdraw[b.index])
+        );
+      })
+      .map(bet => {
+        const token = getTokenForAddress(bet.paymentToken);
+        const isOpen = bet.outcome.toString() === "0";
+        return (
+          <Paper style={styles.card}>
             <div>
-              <Divider />
-              <h5>Place Your Bet</h5>
-              {bet.options.map((option, optionIndex) => (
-                <Button
-                  onClick={() => this.placeBet(bet.index, optionIndex + 1)}
-                >
-                  {option}
+              <h4>I bet that...</h4>
+              <Link to={"/" + bet.index}>{bet.terms}</Link>
+            </div>
+            <div>
+              <h4>Bet Amount: </h4>
+              {bet.amount / Math.pow(10, token!.decimals)} {token!.name}
+            </div>
+            <div>
+              <h4>Pool Balance: </h4>
+              {bet.totalPool / Math.pow(10, token!.decimals)} {token!.name}
+            </div>
+            {isOpen ? (
+              <div>
+                <Divider />
+                {bet.userChoice.toString() === "0" ? (
+                  <div>
+                    <h5>Place Your Bet</h5>
+                    {bet.options.map((option, optionIndex) => (
+                      <Button
+                        onClick={() =>
+                          this.placeBet(bet.index, optionIndex + 1)
+                        }
+                      >
+                        {option}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <div>
+                    <h5>You Bet</h5>
+                    {bet.options[bet.userChoice - 1]}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <h4>Bet Outcome</h4>
+                {bet.options[bet.outcome - 1]}
+              </div>
+            )}
+            {this.state.canWithdraw[bet.index.toString()] ? (
+              <div>
+                <h4> Congrats! </h4>
+                <Button onClick={() => this.redeemBet(bet.index)}>
+                  Widthdraw
                 </Button>
-              ))}
-            </div>
-          ) : (
-            <div>
-              <h4>Bet Outcome</h4>
-              {bet.options[bet.outcome - 1]}
-            </div>
-          )}
-          {this.state.canWithdraw[bet.index.toString()] ? (
-            <div>
-              <h4> Congrats! </h4>
-              <Button onClick={() => this.redeemBet(bet.index)}>
-                Widthdraw
-              </Button>
-            </div>
-          ) : null}
-          {isOpen && this.state.user === bet.oracle ? (
-            <div>
-              <Divider />
-              <h5>Oracle</h5>
-              {bet.options.map((option, optionIndex) => (
-                <Button
-                  onClick={() => this.resolveBet(bet.index, optionIndex + 1)}
-                >
-                  {option}
-                </Button>
-              ))}
-            </div>
-          ) : null}
-        </Paper>
-      );
-    });
+              </div>
+            ) : null}
+            {isOpen && this.state.user === bet.oracle ? (
+              <div>
+                <Divider />
+                <h5>Oracle</h5>
+                {bet.options.map((option, optionIndex) => (
+                  <Button
+                    onClick={() => this.resolveBet(bet.index, optionIndex + 1)}
+                  >
+                    {option}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+          </Paper>
+        );
+      });
     return (
       <div style={{ ...styles.card, ...styles.section }}>
         {bets.length > 0 ? bets : <CircularProgress className="inherit" />}
@@ -397,7 +422,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
     return (
       <div>
         <div style={styles.section}>{this.createBetsComponent()}</div>
-        <div style={styles.section}>{this.betsComponent()}</div>
+        <div style={styles.section}>{this.betsComponent(true)}</div>
       </div>
     );
   }
