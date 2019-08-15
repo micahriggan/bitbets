@@ -13,8 +13,8 @@ const App: React.FC = () => {
       <img src={BitBetsLogo} alt="logo" className="App-logo"/>
       <Router history={customHistory}>
         <Switch>
-          <Route exact path="/:bet" component={BetContainer} />
-          <Route exact path="/" component={BitBetsContainer} />
+          <Route exact path="/:room/:bet" component={BetContainer} />
+          <Route exact path="/:room" component={BitBetsContainer} />
         </Switch>
       </Router>
     </div>

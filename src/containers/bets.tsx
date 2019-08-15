@@ -63,6 +63,7 @@ export interface Bet {
   userChoice: number;
 }
 interface IState {
+  room: string;
   network: keyof typeof BetContractAddress;
   bets: Array<Bet>;
   newBet: Partial<Bet>;
@@ -73,6 +74,7 @@ interface IState {
 
 interface IProps
   extends RouteComponentProps<{
+    room: string;
     bet?: string;
   }> {}
 
@@ -101,6 +103,7 @@ const styles = {
 export class BitBetsContainer extends React.Component<IProps, IState> {
   web3: Web3 = new Web3();
   state: IState = {
+    room: "main",
     network: "dev",
     bets: new Array<Bet>(),
     newBet: {
@@ -123,7 +126,8 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
 
     const networkId = await this.web3.eth.net.getId();
     const network = networkId === 1 ? "mainnet" : "dev";
-    this.setState({ network });
+    const room = this.props.match.params.room || "main";
+    this.setState({ network, room });
     await this.populateUser();
     this.populateBetsState();
   }
@@ -264,6 +268,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
                     {option}
                   </Button>
                 ))}
+                <Button onClick={() => this.scrapBet(bet.index)}>Cancel</Button>
               </div>
             ) : null}
           </Paper>
@@ -361,6 +366,16 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
     const value = bet.amount;
     await this.getBetsContract()
       .methods.resolveBet(betIndex, optionIndex)
+      .send({ from });
+    this.populateBetsState();
+  }
+
+  async scrapBet(betIndex: number) {
+    const [from] = await this.web3.eth.getAccounts();
+    const bet = this.state.bets.find(b => b.index === betIndex)!;
+    const value = bet.amount;
+    await this.getBetsContract()
+      .methods.scrapBet(betIndex)
       .send({ from });
     this.populateBetsState();
   }
