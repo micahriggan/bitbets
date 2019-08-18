@@ -29,6 +29,14 @@ export class BetContainer extends BitBetsContainer {
         .userBets(index, this.state.user)
         .call();
       bet.options = bet.options.split(",");
+      bet.choiceCounts = [];
+      for (let c = 0; c < bet.options.length; c++) {
+        const betCount = await contract.methods
+          .choiceBets(index, c + 1)
+          .call();
+        bet.choiceCounts.push(betCount);
+      }
+
       bet.userChoice = choice;
       bet.index = index;
       bets.push(bet);
