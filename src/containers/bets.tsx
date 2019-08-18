@@ -49,6 +49,7 @@ export interface ContractBet {
   outcome: number;
   totalPool: number;
   paymentToken: string;
+  scrapped: boolean;
 }
 
 export interface Bet {
@@ -61,7 +62,9 @@ export interface Bet {
   paymentToken: string;
   index: number;
   userChoice: number;
+  scrapped: boolean;
 }
+
 interface IState {
   room: string;
   network: keyof typeof BetContractAddress;
@@ -160,7 +163,8 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
         if (betItr.outcome) {
           canWithdraw[index.toString()] = await this.canWithdraw(
             index,
-            betItr.outcome
+            betItr.outcome,
+            betItr.scrapped
           );
         }
 
@@ -181,25 +185,25 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
     this.setState({ bets, canWithdraw });
   }
 
-  async canWithdraw(betIndex: number, outcome: number) {
+  async canWithdraw(betIndex: number, outcome: number, isScrapped: boolean) {
     const user = this.state.user;
     const contract = this.getBetsContract();
-    const isDone = outcome.toString() !== "0";
+    const isDone = outcome.toString() !== "0" || isScrapped;
     const choice = await contract.methods.userBets(betIndex, user).call();
+    const choseCorrect = choice === outcome || isScrapped;
     const withdrawn = await contract.methods
       .userWithdrawn(betIndex, user)
       .call();
-    return isDone && choice === outcome && !withdrawn;
+    return isDone && choseCorrect && !withdrawn;
   }
 
   betsComponent(filter: boolean) {
     const bets = this.state.bets
       .reverse()
       .filter(b => {
-        return (
-          !filter ||
-          (b.outcome.toString() === "0" || this.state.canWithdraw[b.index])
-        );
+        const isActiveBet = b.outcome.toString() === "0" && !b.scrapped;
+        const canWithdraw = this.state.canWithdraw[b.index];
+        return !filter || isActiveBet || canWithdraw;
       })
       .map(bet => {
         const token = getTokenForAddress(bet.paymentToken);
@@ -231,7 +235,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
                             this.placeBet(bet.index, optionIndex + 1)
                           }
                         >
-                          {option}
+                          {option} 
                         </Button>
                       ) : null
                     )}
@@ -381,6 +385,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
   }
 
   async redeemBet(betIndex: number) {
+    console.log(betIndex);
     const [from] = await this.web3.eth.getAccounts();
     await this.getBetsContract()
       .methods.withdraw(betIndex)

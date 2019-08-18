@@ -22,7 +22,8 @@ export class BetContainer extends BitBetsContainer {
       if (bet.outcome) {
         canWithdraw[index.toString()] = await this.canWithdraw(
           index,
-          bet.outcome
+          bet.outcome,
+          bet.scrapped
         );
       }
       const choice = await contract.methods

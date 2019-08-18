@@ -15,6 +15,7 @@ const App: React.FC = () => {
         <Switch>
           <Route exact path="/:room/:bet" component={BetContainer} />
           <Route exact path="/:room" component={BitBetsContainer} />
+          <Route exact path="/" component={BitBetsContainer} />
         </Switch>
       </Router>
     </div>

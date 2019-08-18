@@ -14,6 +14,7 @@ contract BitBets {
     uint outcome;
     uint totalPool;
     address paymentToken;
+    bool scrapped;
   }
 
 
@@ -22,7 +23,7 @@ contract BitBets {
   uint public scrappedBalance;
 
 
-  constructor() {
+  constructor() public {
     owner = msg.sender;
   }
 
@@ -34,7 +35,8 @@ contract BitBets {
       oracle: msg.sender,
       outcome: 0,
       totalPool: 0,
-      paymentToken: paymentToken
+      paymentToken: paymentToken,
+      scrapped: false
     }));
   }
 
@@ -55,27 +57,33 @@ contract BitBets {
 
   modifier isOracle(uint betIndex) {
     require(bets[betIndex].oracle == msg.sender, "You must be the oracle for this bet");
+    _;
   }
 
   modifier isAdmin() {
     require(msg.sender == owner, "You must be the contract owner");
+    _;
   }
 
   modifier isUnresolved(uint betIndex) {
     require(bets[betIndex].outcome == 0, "Bet is already resolved");
     require(bets[betIndex].scrapped == false, "Bet is scrapped");
+    _;
   }
 
   modifier isResolved(uint betIndex) {
-    require(bets[betIndex].outcome != 0, "Bet is not resolved yet");
+    require(bets[betIndex].scrapped || bets[betIndex].outcome != 0, "Bet is not resolved yet");
+    _;
   }
 
   modifier didBet(uint betIndex) {
     require(userBets[betIndex][msg.sender] > 0, "You must have placed a bet");
+    _;
   }
 
   modifier canWithdraw(uint betIndex) {
     require(userWithdrawn[betIndex][msg.sender] == false, "You've already withdrawn");
+    _;
   }
 
   function resolveBet(uint betIndex, uint outcome) public isOracle(betIndex) isUnresolved(betIndex) {
@@ -85,22 +93,23 @@ contract BitBets {
 
   function scrapBet(uint betIndex) public isOracle(betIndex) isUnresolved(betIndex) {
     bets[betIndex].scrapped = true;
-    scrappedBalance += bets[betIndex].totalPool * 50 / 100;
+    scrappedBalance += bets[betIndex].totalPool / 2;
   }
 
-  function sweepScraps() isAdmin {
+  function sweepScraps() public isAdmin {
     scrappedBalance = 0;
     msg.sender.transfer(scrappedBalance);
   }
 
-  function withdraw(uint betIndex) public isResolved(betIndex) didBet(betIndex) canWithdraw(betIndex) {
+  function withdraw(uint betIndex) public isResolved(betIndex) canWithdraw(betIndex) didBet(betIndex) {
     Bet memory currentBet = bets[betIndex];
-    uint reward = currentBet.totalPool / choiceBets[betIndex][currentBet.outcome];
+    uint reward = 0;
     if(currentBet.scrapped == false) {
       require(userBets[betIndex][msg.sender] == currentBet.outcome, "You didn't select the correct answer");
+      reward = currentBet.totalPool / choiceBets[betIndex][currentBet.outcome];
     } else {
       // You get half of a canceled bet
-      reward = currentBet.amount * 50 / 100;
+      reward = currentBet.amount / 2;
     }
     userWithdrawn[betIndex][msg.sender] = true;
     if(currentBet.paymentToken == address(0x0)) {
