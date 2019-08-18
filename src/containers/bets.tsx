@@ -49,6 +49,7 @@ export interface ContractBet {
   outcome: number;
   totalPool: number;
   paymentToken: string;
+  scrapped: boolean;
 }
 
 export interface Bet {
@@ -61,8 +62,11 @@ export interface Bet {
   paymentToken: string;
   index: number;
   userChoice: number;
+  scrapped: boolean;
 }
+
 interface IState {
+  room: string;
   network: keyof typeof BetContractAddress;
   bets: Array<Bet>;
   newBet: Partial<Bet>;
@@ -73,6 +77,7 @@ interface IState {
 
 interface IProps
   extends RouteComponentProps<{
+    room: string;
     bet?: string;
   }> {}
 
@@ -101,6 +106,7 @@ const styles = {
 export class BitBetsContainer extends React.Component<IProps, IState> {
   web3: Web3 = new Web3();
   state: IState = {
+    room: "main",
     network: "dev",
     bets: new Array<Bet>(),
     newBet: {
@@ -123,7 +129,8 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
 
     const networkId = await this.web3.eth.net.getId();
     const network = networkId === 1 ? "mainnet" : "dev";
-    this.setState({ network });
+    const room = this.props.match.params.room || "main";
+    this.setState({ network, room });
     await this.populateUser();
     this.populateBetsState();
   }
@@ -156,7 +163,8 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
         if (betItr.outcome) {
           canWithdraw[index.toString()] = await this.canWithdraw(
             index,
-            betItr.outcome
+            betItr.outcome,
+            betItr.scrapped
           );
         }
 
@@ -177,25 +185,25 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
     this.setState({ bets, canWithdraw });
   }
 
-  async canWithdraw(betIndex: number, outcome: number) {
+  async canWithdraw(betIndex: number, outcome: number, isScrapped: boolean) {
     const user = this.state.user;
     const contract = this.getBetsContract();
-    const isDone = outcome.toString() !== "0";
+    const isDone = outcome.toString() !== "0" || isScrapped;
     const choice = await contract.methods.userBets(betIndex, user).call();
+    const choseCorrect = choice === outcome || isScrapped;
     const withdrawn = await contract.methods
       .userWithdrawn(betIndex, user)
       .call();
-    return isDone && choice === outcome && !withdrawn;
+    return isDone && choseCorrect && !withdrawn;
   }
 
   betsComponent(filter: boolean) {
     const bets = this.state.bets
       .reverse()
       .filter(b => {
-        return (
-          !filter ||
-          (b.outcome.toString() === "0" || this.state.canWithdraw[b.index])
-        );
+        const isActiveBet = b.outcome.toString() === "0" && !b.scrapped;
+        const canWithdraw = this.state.canWithdraw[b.index];
+        return !filter || isActiveBet || canWithdraw;
       })
       .map(bet => {
         const token = getTokenForAddress(bet.paymentToken);
@@ -227,7 +235,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
                             this.placeBet(bet.index, optionIndex + 1)
                           }
                         >
-                          {option}
+                          {option} 
                         </Button>
                       ) : null
                     )}
@@ -264,6 +272,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
                     {option}
                   </Button>
                 ))}
+                <Button onClick={() => this.scrapBet(bet.index)}>Cancel</Button>
               </div>
             ) : null}
           </Paper>
@@ -365,7 +374,18 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
     this.populateBetsState();
   }
 
+  async scrapBet(betIndex: number) {
+    const [from] = await this.web3.eth.getAccounts();
+    const bet = this.state.bets.find(b => b.index === betIndex)!;
+    const value = bet.amount;
+    await this.getBetsContract()
+      .methods.scrapBet(betIndex)
+      .send({ from });
+    this.populateBetsState();
+  }
+
   async redeemBet(betIndex: number) {
+    console.log(betIndex);
     const [from] = await this.web3.eth.getAccounts();
     await this.getBetsContract()
       .methods.withdraw(betIndex)
