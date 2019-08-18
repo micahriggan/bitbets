@@ -61,6 +61,7 @@ export interface Bet {
   paymentToken: string;
   index: number;
   userChoice: number;
+  choiceCounts: number[];
 }
 interface IState {
   network: keyof typeof BetContractAddress;
@@ -165,6 +166,13 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
           .call();
         betItr.userChoice = choice;
         betItr.options = betItr.options.split(",");
+        betItr.choiceCounts = [];
+        for (let c = 0; c < betItr.options.length; c++) {
+          const betCount = await contract.methods
+            .choiceBets(index, c + 1)
+            .call();
+          betItr.choiceCounts.push(betCount);
+        }
         betItr.index = index;
         bets.push(betItr);
         index++;
@@ -227,7 +235,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
                             this.placeBet(bet.index, optionIndex + 1)
                           }
                         >
-                          {option}
+                          {option} ({bet.choiceCounts[optionIndex]})
                         </Button>
                       ) : null
                     )}
