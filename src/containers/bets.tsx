@@ -65,6 +65,8 @@ export interface Bet {
 }
 interface IState {
   network: keyof typeof BetContractAddress;
+  loading: boolean;
+  filter: boolean;
   bets: Array<Bet>;
   newBet: Partial<Bet>;
   betOption: string;
@@ -102,6 +104,8 @@ const styles = {
 export class BitBetsContainer extends React.Component<IProps, IState> {
   web3: Web3 = new Web3();
   state: IState = {
+    loading: true,
+    filter: true,
     network: "dev",
     bets: new Array<Bet>(),
     newBet: {
@@ -168,11 +172,10 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
         betItr.options = betItr.options.split(",");
         betItr.choiceCounts = [];
         for (let c = 0; c < betItr.options.length; c++) {
-          const betCount = await contract.methods
-            .choiceBets(index, c + 1)
-            .call();
+          const betCount = contract.methods.choiceBets(index, c + 1).call();
           betItr.choiceCounts.push(betCount);
         }
+        betItr.choiceCounts = await Promise.all(betItr.choiceCounts);
         betItr.index = index;
         bets.push(betItr);
         index++;
@@ -182,7 +185,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
       console.log(e);
     }
 
-    this.setState({ bets, canWithdraw });
+    this.setState({ bets, canWithdraw, loading: false });
   }
 
   async canWithdraw(betIndex: number, outcome: number) {
@@ -250,7 +253,13 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
             ) : (
               <div>
                 <h4>Bet Outcome</h4>
-                {bet.options[bet.outcome - 1]}
+                {bet.options[bet.outcome - 1]} (
+                {bet.choiceCounts[bet.outcome - 1]}) -{" "}
+                {bet.userChoice.toString() === "0"
+                  ? "MISS"
+                  : bet.userChoice == bet.outcome
+                  ? "WIN"
+                  : "LOSS"}
               </div>
             )}
             {this.state.canWithdraw[bet.index.toString()] ? (
@@ -279,7 +288,7 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
       });
     return (
       <div style={{ ...styles.card, ...styles.section }}>
-        {bets.length > 0 ? bets : <CircularProgress className="inherit" />}
+        {!this.state.loading ? bets : <CircularProgress className="inherit" />}
       </div>
     );
   }
@@ -435,7 +444,14 @@ export class BitBetsContainer extends React.Component<IProps, IState> {
     return (
       <div>
         <div style={styles.section}>{this.createBetsComponent()}</div>
-        <div style={styles.section}>{this.betsComponent(true)}</div>
+        <div style={styles.section}>
+          {this.betsComponent(this.state.filter)}
+        </div>
+        {!this.state.loading ? (
+          <Button onClick={() => this.setState({ filter: false })}>
+            Show Old Bets
+          </Button>
+        ) : null}
       </div>
     );
   }
